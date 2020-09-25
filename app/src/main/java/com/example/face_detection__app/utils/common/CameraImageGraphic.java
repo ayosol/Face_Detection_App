@@ -5,7 +5,9 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 
 
-/** Draw camera image to background. */
+/**
+ * Draw camera image to background.
+ */
 public class CameraImageGraphic extends GraphicOverlay.Graphic {
 
     private final Bitmap bitmap;

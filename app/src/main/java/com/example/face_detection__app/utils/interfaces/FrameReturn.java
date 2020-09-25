@@ -7,7 +7,7 @@ import com.example.face_detection__app.utils.common.GraphicOverlay;
 import com.google.firebase.ml.vision.face.FirebaseVisionFace;
 
 
-public interface FrameReturn{
+public interface FrameReturn {
     void onFrame(
             Bitmap image,
             FirebaseVisionFace face,

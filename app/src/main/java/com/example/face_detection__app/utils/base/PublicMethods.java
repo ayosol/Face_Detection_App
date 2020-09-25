@@ -79,7 +79,7 @@ public class PublicMethods {
     }
 
 
-    public static String saveToInternalStorage(Bitmap bitmapImage,String fileName, Context mContext) {
+    public static String saveToInternalStorage(Bitmap bitmapImage, String fileName, Context mContext) {
         File directory = mContext.getDir("imageDir", Context.MODE_PRIVATE);
         File imgPath = new File(directory, fileName);
         FileOutputStream fos = null;
@@ -98,9 +98,9 @@ public class PublicMethods {
         return directory.getAbsolutePath();
     }
 
-    public static Bitmap getBitmapByPath(String path , String fileName) {
+    public static Bitmap getBitmapByPath(String path, String fileName) {
         try {
-            File f=new File(path, fileName);
+            File f = new File(path, fileName);
             return BitmapFactory.decodeStream(new FileInputStream(f));
         } catch (FileNotFoundException e) {
             return null;

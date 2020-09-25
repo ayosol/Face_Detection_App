@@ -23,6 +23,13 @@ public class FrameMetadata {
     private final int rotation;
     private final int cameraFacing;
 
+    private FrameMetadata(int width, int height, int rotation, int facing) {
+        this.width = width;
+        this.height = height;
+        this.rotation = rotation;
+        cameraFacing = facing;
+    }
+
     int getWidth() {
         return width;
     }
@@ -37,13 +44,6 @@ public class FrameMetadata {
 
     public int getCameraFacing() {
         return cameraFacing;
-    }
-
-    private FrameMetadata(int width, int height, int rotation, int facing) {
-        this.width = width;
-        this.height = height;
-        this.rotation = rotation;
-        cameraFacing = facing;
     }
 
     /**

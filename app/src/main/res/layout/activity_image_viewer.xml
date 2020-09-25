@@ -4,7 +4,6 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000"
     tools:context=".ui.ImageViewerActivity">
 
     <ImageView
@@ -14,6 +13,7 @@
         android:adjustViewBounds="true"
         android:minWidth="200dp"
         android:minHeight="200dp"
+        android:contentDescription="Image_Result"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

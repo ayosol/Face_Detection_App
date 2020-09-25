@@ -54,68 +54,27 @@ public class CameraSource {
 
   @SuppressLint("InlinedApi")
   public static final int CAMERA_FACING_FRONT = CameraInfo.CAMERA_FACING_FRONT;
-
+  public final static int requestedPreviewWidth = 480;
+  public final static int requestedPreviewHeight = 360;
   private static final String TAG = "MIDemoApp:CameraSource";
-
   /**
    * The dummy surface texture must be assigned a chosen name. Since we never use an OpenGL context,
    * we can choose any ID we want here. The dummy surface texture is not a crazy hack - it is
    * actually how the camera team recommends using the camera without a preview.
    */
   private static final int DUMMY_TEXTURE_NAME = 100;
-
   /**
    * If the absolute difference between a preview size aspect ratio and a picture size aspect ratio
    * is less than this tolerance, they are considered to be the same aspect ratio.
    */
   private static final float ASPECT_RATIO_TOLERANCE = 0.01f;
-
-  protected Activity activity;
-
-  private Camera camera;
-
-  protected int facing = CAMERA_FACING_FRONT;
-
-  /**
-   * Rotation of the device, and thus the associated preview images captured from the device. See
-   * Frame.Metadata#getRotation().
-   */
-  private int rotation;
-
-  private Size previewSize;
-
   // These values may be requested by the caller.  Due to hardware limitations, we may need to
   // select close, but not exactly the same values for these.
   private final float requestedFps = 20.0f;
-  public final static int requestedPreviewWidth = 480;
-  public final static int requestedPreviewHeight = 360;
   private final boolean requestedAutoFocus = true;
-
-  // These instances need to be held onto to avoid GC of their underlying resources.  Even though
-  // these aren't used outside of the method that creates them, they still must have hard
-  // references maintained to them.
-  private SurfaceTexture dummySurfaceTexture;
   private final GraphicOverlay graphicOverlay;
-
-  // True if a SurfaceTexture is being used for the preview, false if a SurfaceHolder is being
-  // used for the preview.  We want to be compatible back to Gingerbread, but SurfaceTexture
-  // wasn't introduced until Honeycomb.  Since the interface cannot use a SurfaceTexture, if the
-  // developer wants to display a preview we must use a SurfaceHolder.  If the developer doesn't
-  // want to display a preview we use a SurfaceTexture if we are running at least Honeycomb.
-  private boolean usingSurfaceTexture;
-
-  /**
-   * Dedicated thread and associated runnable for calling into the detector with frames, as the
-   * frames become available from the camera.
-   */
-  private Thread processingThread;
-
   private final FrameProcessingRunnable processingRunnable;
-
   private final Object processorLock = new Object();
-  // @GuardedBy("processorLock")
-  private VisionImageProcessor frameProcessor;
-
   /**
    * Map to convert between a byte array, received from the camera, and its associated byte buffer.
    * We use byte buffers internally because this is a more efficient way to call into native code
@@ -126,6 +85,32 @@ public class CameraSource {
    * identity ('==') check on the keys.
    */
   private final Map<byte[], ByteBuffer> bytesToByteBuffer = new IdentityHashMap<>();
+  protected Activity activity;
+  protected int facing = CAMERA_FACING_FRONT;
+  private Camera camera;
+  /**
+   * Rotation of the device, and thus the associated preview images captured from the device. See
+   * Frame.Metadata#getRotation().
+   */
+  private int rotation;
+  private Size previewSize;
+  // These instances need to be held onto to avoid GC of their underlying resources.  Even though
+  // these aren't used outside of the method that creates them, they still must have hard
+  // references maintained to them.
+  private SurfaceTexture dummySurfaceTexture;
+  // True if a SurfaceTexture is being used for the preview, false if a SurfaceHolder is being
+  // used for the preview.  We want to be compatible back to Gingerbread, but SurfaceTexture
+  // wasn't introduced until Honeycomb.  Since the interface cannot use a SurfaceTexture, if the
+  // developer wants to display a preview we must use a SurfaceHolder.  If the developer doesn't
+  // want to display a preview we use a SurfaceTexture if we are running at least Honeycomb.
+  private boolean usingSurfaceTexture;
+  /**
+   * Dedicated thread and associated runnable for calling into the detector with frames, as the
+   * frames become available from the camera.
+   */
+  private Thread processingThread;
+  // @GuardedBy("processorLock")
+  private VisionImageProcessor frameProcessor;
 
   public CameraSource(Activity activity, GraphicOverlay overlay) {
     this.activity = activity;
@@ -144,7 +129,139 @@ public class CameraSource {
   // Public
   // ==============================================================================================
 
-  /** Stops the camera and releases the resources of the camera and underlying detector. */
+  /**
+   * Gets the id for the camera specified by the direction it is facing. Returns -1 if no such
+   * camera was found.
+   *
+   * @param facing the desired camera (front-facing or rear-facing)
+   */
+  private static int getIdForRequestedCamera(int facing) {
+    CameraInfo cameraInfo = new CameraInfo();
+    for (int i = 0; i < Camera.getNumberOfCameras(); ++i) {
+      Camera.getCameraInfo(i, cameraInfo);
+      if (cameraInfo.facing == facing) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Selects the most suitable preview and picture size, given the desired width and height.
+   *
+   * <p>Even though we only need to find the preview size, it's necessary to find both the preview
+   * size and the picture size of the camera together, because these need to have the same aspect
+   * ratio. On some hardware, if you would only set the preview size, you will get a distorted
+   * image.
+   *
+   * @param camera        the camera to select a preview size from
+   * @param desiredWidth  the desired width of the camera preview frames
+   * @param desiredHeight the desired height of the camera preview frames
+   * @return the selected preview and picture size pair
+   */
+  private static SizePair selectSizePair(Camera camera, int desiredWidth, int desiredHeight) {
+    List<SizePair> validPreviewSizes = generateValidPreviewSizeList(camera);
+
+    // The method for selecting the best size is to minimize the sum of the differences between
+    // the desired values and the actual values for width and height.  This is certainly not the
+    // only way to select the best size, but it provides a decent trade-off between using the
+    // closest aspect ratio vs. using the closest pixel area.
+    SizePair selectedPair = null;
+    int minDiff = Integer.MAX_VALUE;
+    for (SizePair sizePair : validPreviewSizes) {
+      Size size = sizePair.previewSize();
+      int diff =
+              Math.abs(size.getWidth() - desiredWidth) + Math.abs(size.getHeight() - desiredHeight);
+      if (diff < minDiff) {
+        selectedPair = sizePair;
+        minDiff = diff;
+      }
+    }
+
+    return selectedPair;
+  }
+
+  /**
+   * Generates a list of acceptable preview sizes. Preview sizes are not acceptable if there is not
+   * a corresponding picture size of the same aspect ratio. If there is a corresponding picture size
+   * of the same aspect ratio, the picture size is paired up with the preview size.
+   *
+   * <p>This is necessary because even if we don't use still pictures, the still picture size must
+   * be set to a size that is the same aspect ratio as the preview size we choose. Otherwise, the
+   * preview images may be distorted on some devices.
+   */
+  private static List<SizePair> generateValidPreviewSizeList(Camera camera) {
+    Camera.Parameters parameters = camera.getParameters();
+    List<Camera.Size> supportedPreviewSizes =
+            parameters.getSupportedPreviewSizes();
+    List<Camera.Size> supportedPictureSizes =
+            parameters.getSupportedPictureSizes();
+    List<SizePair> validPreviewSizes = new ArrayList<>();
+    for (Camera.Size previewSize : supportedPreviewSizes) {
+      float previewAspectRatio = (float) previewSize.width / (float) previewSize.height;
+
+      // By looping through the picture sizes in order, we favor the higher resolutions.
+      // We choose the highest resolution in order to support taking the full resolution
+      // picture later.
+      for (Camera.Size pictureSize : supportedPictureSizes) {
+        float pictureAspectRatio = (float) pictureSize.width / (float) pictureSize.height;
+        if (Math.abs(previewAspectRatio - pictureAspectRatio) < ASPECT_RATIO_TOLERANCE) {
+          validPreviewSizes.add(new SizePair(previewSize, pictureSize));
+          break;
+        }
+      }
+    }
+
+    // If there are no picture sizes with the same aspect ratio as any preview sizes, allow all
+    // of the preview sizes and hope that the camera can handle it.  Probably unlikely, but we
+    // still account for it.
+    if (validPreviewSizes.size() == 0) {
+      Log.w(TAG, "No preview sizes have a corresponding same-aspect-ratio picture size");
+      for (Camera.Size previewSize : supportedPreviewSizes) {
+        // The null picture size will let us know that we shouldn't set a picture size.
+        validPreviewSizes.add(new SizePair(previewSize, null));
+      }
+    }
+
+    return validPreviewSizes;
+  }
+
+  /**
+   * Selects the most suitable preview frames per second range, given the desired frames per second.
+   *
+   * @param camera            the camera to select a frames per second range from
+   * @param desiredPreviewFps the desired frames per second for the camera preview frames
+   * @return the selected preview frames per second range
+   */
+  @SuppressLint("InlinedApi")
+  private static int[] selectPreviewFpsRange(Camera camera, float desiredPreviewFps) {
+    // The camera API uses integers scaled by a factor of 1000 instead of floating-point frame
+    // rates.
+    int desiredPreviewFpsScaled = (int) (desiredPreviewFps * 1000.0f);
+
+    // The method for selecting the best range is to minimize the sum of the differences between
+    // the desired value and the upper and lower bounds of the range.  This may select a range
+    // that the desired value is outside of, but this is often preferred.  For example, if the
+    // desired frame rate is 29.97, the range (30, 30) is probably more desirable than the
+    // range (15, 30).
+    int[] selectedFpsRange = null;
+    int minDiff = Integer.MAX_VALUE;
+    List<int[]> previewFpsRangeList = camera.getParameters().getSupportedPreviewFpsRange();
+    for (int[] range : previewFpsRangeList) {
+      int deltaMin = desiredPreviewFpsScaled - range[Camera.Parameters.PREVIEW_FPS_MIN_INDEX];
+      int deltaMax = desiredPreviewFpsScaled - range[Camera.Parameters.PREVIEW_FPS_MAX_INDEX];
+      int diff = Math.abs(deltaMin) + Math.abs(deltaMax);
+      if (diff < minDiff) {
+        selectedFpsRange = range;
+        minDiff = diff;
+      }
+    }
+    return selectedFpsRange;
+  }
+
+  /**
+   * Stops the camera and releases the resources of the camera and underlying detector.
+   */
   public void release() {
     synchronized (processorLock) {
       stop();
@@ -250,7 +367,9 @@ public class CameraSource {
     bytesToByteBuffer.clear();
   }
 
-  /** Changes the facing of the camera. */
+  /**
+   * Changes the facing of the camera.
+   */
   public synchronized void setFacing(int facing) {
     if ((facing != CAMERA_FACING_BACK) && (facing != CAMERA_FACING_FRONT)) {
       throw new IllegalArgumentException("Invalid camera: " + facing);
@@ -258,7 +377,9 @@ public class CameraSource {
     this.facing = facing;
   }
 
-  /** Returns the preview size that is currently in use by the underlying camera. */
+  /**
+   * Returns the preview size that is currently in use by the underlying camera.
+   */
   public Size getPreviewSize() {
     return previewSize;
   }
@@ -303,16 +424,16 @@ public class CameraSource {
     }
     parameters.setPreviewSize(previewSize.getWidth(), previewSize.getHeight());
     parameters.setPreviewFpsRange(
-        previewFpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX],
-        previewFpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
+            previewFpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX],
+            previewFpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
     parameters.setPreviewFormat(ImageFormat.NV21);
 
     setRotation(camera, parameters, requestedCameraId);
 
     if (requestedAutoFocus) {
       if (parameters
-          .getSupportedFocusModes()
-          .contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO)) {
+              .getSupportedFocusModes()
+              .contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO)) {
         parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO);
       } else {
         Log.i(TAG, "Camera auto focus is not supported on this device.");
@@ -342,170 +463,11 @@ public class CameraSource {
   }
 
   /**
-   * Gets the id for the camera specified by the direction it is facing. Returns -1 if no such
-   * camera was found.
-   *
-   * @param facing the desired camera (front-facing or rear-facing)
-   */
-  private static int getIdForRequestedCamera(int facing) {
-    CameraInfo cameraInfo = new CameraInfo();
-    for (int i = 0; i < Camera.getNumberOfCameras(); ++i) {
-      Camera.getCameraInfo(i, cameraInfo);
-      if (cameraInfo.facing == facing) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  /**
-   * Selects the most suitable preview and picture size, given the desired width and height.
-   *
-   * <p>Even though we only need to find the preview size, it's necessary to find both the preview
-   * size and the picture size of the camera together, because these need to have the same aspect
-   * ratio. On some hardware, if you would only set the preview size, you will get a distorted
-   * image.
-   *
-   * @param camera the camera to select a preview size from
-   * @param desiredWidth the desired width of the camera preview frames
-   * @param desiredHeight the desired height of the camera preview frames
-   * @return the selected preview and picture size pair
-   */
-  private static SizePair selectSizePair(Camera camera, int desiredWidth, int desiredHeight) {
-    List<SizePair> validPreviewSizes = generateValidPreviewSizeList(camera);
-
-    // The method for selecting the best size is to minimize the sum of the differences between
-    // the desired values and the actual values for width and height.  This is certainly not the
-    // only way to select the best size, but it provides a decent tradeoff between using the
-    // closest aspect ratio vs. using the closest pixel area.
-    SizePair selectedPair = null;
-    int minDiff = Integer.MAX_VALUE;
-    for (SizePair sizePair : validPreviewSizes) {
-      Size size = sizePair.previewSize();
-      int diff =
-          Math.abs(size.getWidth() - desiredWidth) + Math.abs(size.getHeight() - desiredHeight);
-      if (diff < minDiff) {
-        selectedPair = sizePair;
-        minDiff = diff;
-      }
-    }
-
-    return selectedPair;
-  }
-
-  /**
-   * Stores a preview size and a corresponding same-aspect-ratio picture size. To avoid distorted
-   * preview images on some devices, the picture size must be set to a size that is the same aspect
-   * ratio as the preview size or the preview may end up being distorted. If the picture size is
-   * null, then there is no picture size with the same aspect ratio as the preview size.
-   */
-  private static class SizePair {
-    private final Size preview;
-    private Size picture;
-
-    SizePair(
-        Camera.Size previewSize,
-        @Nullable Camera.Size pictureSize) {
-      preview = new Size(previewSize.width, previewSize.height);
-      if (pictureSize != null) {
-        picture = new Size(pictureSize.width, pictureSize.height);
-      }
-    }
-
-    Size previewSize() {
-      return preview;
-    }
-
-    @Nullable
-    Size pictureSize() {
-      return picture;
-    }
-  }
-
-  /**
-   * Generates a list of acceptable preview sizes. Preview sizes are not acceptable if there is not
-   * a corresponding picture size of the same aspect ratio. If there is a corresponding picture size
-   * of the same aspect ratio, the picture size is paired up with the preview size.
-   *
-   * <p>This is necessary because even if we don't use still pictures, the still picture size must
-   * be set to a size that is the same aspect ratio as the preview size we choose. Otherwise, the
-   * preview images may be distorted on some devices.
-   */
-  private static List<SizePair> generateValidPreviewSizeList(Camera camera) {
-    Camera.Parameters parameters = camera.getParameters();
-    List<Camera.Size> supportedPreviewSizes =
-        parameters.getSupportedPreviewSizes();
-    List<Camera.Size> supportedPictureSizes =
-        parameters.getSupportedPictureSizes();
-    List<SizePair> validPreviewSizes = new ArrayList<>();
-    for (Camera.Size previewSize : supportedPreviewSizes) {
-      float previewAspectRatio = (float) previewSize.width / (float) previewSize.height;
-
-      // By looping through the picture sizes in order, we favor the higher resolutions.
-      // We choose the highest resolution in order to support taking the full resolution
-      // picture later.
-      for (Camera.Size pictureSize : supportedPictureSizes) {
-        float pictureAspectRatio = (float) pictureSize.width / (float) pictureSize.height;
-        if (Math.abs(previewAspectRatio - pictureAspectRatio) < ASPECT_RATIO_TOLERANCE) {
-          validPreviewSizes.add(new SizePair(previewSize, pictureSize));
-          break;
-        }
-      }
-    }
-
-    // If there are no picture sizes with the same aspect ratio as any preview sizes, allow all
-    // of the preview sizes and hope that the camera can handle it.  Probably unlikely, but we
-    // still account for it.
-    if (validPreviewSizes.size() == 0) {
-      Log.w(TAG, "No preview sizes have a corresponding same-aspect-ratio picture size");
-      for (Camera.Size previewSize : supportedPreviewSizes) {
-        // The null picture size will let us know that we shouldn't set a picture size.
-        validPreviewSizes.add(new SizePair(previewSize, null));
-      }
-    }
-
-    return validPreviewSizes;
-  }
-
-  /**
-   * Selects the most suitable preview frames per second range, given the desired frames per second.
-   *
-   * @param camera the camera to select a frames per second range from
-   * @param desiredPreviewFps the desired frames per second for the camera preview frames
-   * @return the selected preview frames per second range
-   */
-  @SuppressLint("InlinedApi")
-  private static int[] selectPreviewFpsRange(Camera camera, float desiredPreviewFps) {
-    // The camera API uses integers scaled by a factor of 1000 instead of floating-point frame
-    // rates.
-    int desiredPreviewFpsScaled = (int) (desiredPreviewFps * 1000.0f);
-
-    // The method for selecting the best range is to minimize the sum of the differences between
-    // the desired value and the upper and lower bounds of the range.  This may select a range
-    // that the desired value is outside of, but this is often preferred.  For example, if the
-    // desired frame rate is 29.97, the range (30, 30) is probably more desirable than the
-    // range (15, 30).
-    int[] selectedFpsRange = null;
-    int minDiff = Integer.MAX_VALUE;
-    List<int[]> previewFpsRangeList = camera.getParameters().getSupportedPreviewFpsRange();
-    for (int[] range : previewFpsRangeList) {
-      int deltaMin = desiredPreviewFpsScaled - range[Camera.Parameters.PREVIEW_FPS_MIN_INDEX];
-      int deltaMax = desiredPreviewFpsScaled - range[Camera.Parameters.PREVIEW_FPS_MAX_INDEX];
-      int diff = Math.abs(deltaMin) + Math.abs(deltaMax);
-      if (diff < minDiff) {
-        selectedFpsRange = range;
-        minDiff = diff;
-      }
-    }
-    return selectedFpsRange;
-  }
-
-  /**
    * Calculates the correct rotation for the given camera id and sets the rotation in the
    * parameters. It also sets the camera's display orientation and rotation.
    *
    * @param parameters the camera parameters for which to set the rotation
-   * @param cameraId the camera id to set rotation based on
+   * @param cameraId   the camera id to set rotation based on
    */
   private void setRotation(Camera camera, Camera.Parameters parameters, int cameraId) {
     WindowManager windowManager = (WindowManager) activity.getSystemService(Context.WINDOW_SERVICE);
@@ -574,18 +536,6 @@ public class CameraSource {
     return byteArray;
   }
 
-  // ==============================================================================================
-  // Frame processing
-  // ==============================================================================================
-
-  /** Called when the camera has a new preview frame. */
-  private class CameraPreviewCallback implements Camera.PreviewCallback {
-    @Override
-    public void onPreviewFrame(byte[] data, Camera camera) {
-      processingRunnable.setNextFrame(data, camera);
-    }
-  }
-
   public void setMachineLearningFrameProcessor(VisionImageProcessor processor) {
     synchronized (processorLock) {
       cleanScreen();
@@ -593,6 +543,56 @@ public class CameraSource {
         frameProcessor.stop();
       }
       frameProcessor = processor;
+    }
+  }
+
+  // ==============================================================================================
+  // Frame processing
+  // ==============================================================================================
+
+  /**
+   * Cleans up graphicOverlay and child classes can do their cleanups as well .
+   */
+  private void cleanScreen() {
+    graphicOverlay.clear();
+  }
+
+  /**
+   * Stores a preview size and a corresponding same-aspect-ratio picture size. To avoid distorted
+   * preview images on some devices, the picture size must be set to a size that is the same aspect
+   * ratio as the preview size or the preview may end up being distorted. If the picture size is
+   * null, then there is no picture size with the same aspect ratio as the preview size.
+   */
+  private static class SizePair {
+    private final Size preview;
+    private Size picture;
+
+    SizePair(
+            Camera.Size previewSize,
+            @Nullable Camera.Size pictureSize) {
+      preview = new Size(previewSize.width, previewSize.height);
+      if (pictureSize != null) {
+        picture = new Size(pictureSize.width, pictureSize.height);
+      }
+    }
+
+    Size previewSize() {
+      return preview;
+    }
+
+    @Nullable
+    Size pictureSize() {
+      return picture;
+    }
+  }
+
+  /**
+   * Called when the camera has a new preview frame.
+   */
+  private class CameraPreviewCallback implements Camera.PreviewCallback {
+    @Override
+    public void onPreviewFrame(byte[] data, Camera camera) {
+      processingRunnable.setNextFrame(data, camera);
     }
   }
 
@@ -615,7 +615,8 @@ public class CameraSource {
     // These pending variables hold the state associated with the new frame awaiting processing.
     private ByteBuffer pendingFrameData;
 
-    FrameProcessingRunnable() {}
+    FrameProcessingRunnable() {
+    }
 
     /**
      * Releases the underlying receiver. This is only safe to do after the associated thread has
@@ -626,7 +627,9 @@ public class CameraSource {
       assert (processingThread.getState() == State.TERMINATED);
     }
 
-    /** Marks the runnable as active/not active. Signals any blocked threads to continue. */
+    /**
+     * Marks the runnable as active/not active. Signals any blocked threads to continue.
+     */
     void setActive(boolean active) {
       synchronized (lock) {
         this.active = active;
@@ -647,9 +650,9 @@ public class CameraSource {
 
         if (!bytesToByteBuffer.containsKey(data)) {
           Log.d(
-              TAG,
-              "Skipping frame. Could not find ByteBuffer associated with the image "
-                  + "data from the camera.");
+                  TAG,
+                  "Skipping frame. Could not find ByteBuffer associated with the image "
+                          + "data from the camera.");
           return;
         }
 
@@ -715,14 +718,14 @@ public class CameraSource {
           synchronized (processorLock) {
             Log.d(TAG, "Process an image");
             frameProcessor.process(
-                data,
-                new FrameMetadata.Builder()
-                    .setWidth(previewSize.getWidth())
-                    .setHeight(previewSize.getHeight())
-                    .setRotation(rotation)
-                    .setCameraFacing(facing)
-                    .build(),
-                graphicOverlay);
+                    data,
+                    new FrameMetadata.Builder()
+                            .setWidth(previewSize.getWidth())
+                            .setHeight(previewSize.getHeight())
+                            .setRotation(rotation)
+                            .setCameraFacing(facing)
+                            .build(),
+                    graphicOverlay);
           }
         } catch (Throwable t) {
           Log.e(TAG, "Exception thrown from receiver.", t);
@@ -731,10 +734,5 @@ public class CameraSource {
         }
       }
     }
-  }
-
-  /** Cleans up graphicOverlay and child classes can do their cleanups as well . */
-  private void cleanScreen() {
-    graphicOverlay.clear();
   }
 }

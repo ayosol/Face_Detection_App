@@ -42,7 +42,7 @@ public class BitmapUtils {
         return null;
     }
 
-    // Rotates a bitmap if it is converted from a bytebuffer.
+    // Rotates a bitmap if it is converted from a byteBuffer.
     private static Bitmap rotateBitmap(Bitmap bitmap, int rotation, int facing) {
         Matrix matrix = new Matrix();
         int rotationDegree = 0;

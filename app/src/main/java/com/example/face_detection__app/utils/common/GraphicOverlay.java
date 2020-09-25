@@ -41,123 +41,135 @@ import java.util.List;
  * </ol>
  */
 public class GraphicOverlay extends View {
-  private final Object lock = new Object();
-  private int previewWidth;
-  private float widthScaleFactor = 1.0f;
-  private int previewHeight;
-  private float heightScaleFactor = 1.0f;
-  private int facing = CameraSource.CAMERA_FACING_BACK;
-  private final List<Graphic> graphics = new ArrayList<>();
+    private final Object lock = new Object();
+    private final List<Graphic> graphics = new ArrayList<>();
+    private int previewWidth;
+    private float widthScaleFactor = 1.0f;
+    private int previewHeight;
+    private float heightScaleFactor = 1.0f;
+    private int facing = CameraSource.CAMERA_FACING_BACK;
 
-  /**
-   * Base class for a custom graphics object to be rendered within the graphic overlay. Subclass
-   * this and implement the {@link Graphic#draw(Canvas)} method to define the graphics element. Add
-   * instances to the overlay using {@link GraphicOverlay#add(Graphic)}.
-   */
-  public abstract static class Graphic {
-    private GraphicOverlay overlay;
-
-    public Graphic(GraphicOverlay overlay) {
-      this.overlay = overlay;
-    }
-
-
-    public abstract void draw(Canvas canvas);
-
-    /**
-     * Adjusts a horizontal value of the supplied value from the preview scale to the view scale.
-     */
-    protected float scaleX(float horizontal) {
-      return horizontal * overlay.widthScaleFactor;
-    }
-
-    /** Adjusts a vertical value of the supplied value from the preview scale to the view scale. */
-    public float scaleY(float vertical) {
-      return vertical * overlay.heightScaleFactor;
-    }
-
-    /** Returns the application context of the app. */
-    public Context getApplicationContext() {
-      return overlay.getContext().getApplicationContext();
+    public GraphicOverlay(Context context, AttributeSet attrs) {
+        super(context, attrs);
     }
 
     /**
-     * Adjusts the x coordinate from the preview's coordinate system to the view coordinate system.
+     * Removes all graphics from the overlay.
      */
-    public float translateX(float x) {
-      if (overlay.facing == CameraSource.CAMERA_FACING_FRONT) {
-        return overlay.getWidth() - scaleX(x);
-      } else {
-        return scaleX(x);
-      }
+    public void clear() {
+        synchronized (lock) {
+            graphics.clear();
+        }
+        postInvalidate();
     }
 
     /**
-     * Adjusts the y coordinate from the preview's coordinate system to the view coordinate system.
+     * Adds a graphic to the overlay.
      */
-    public float translateY(float y) {
-      return scaleY(y);
+    public void add(Graphic graphic) {
+        synchronized (lock) {
+            graphics.add(graphic);
+        }
     }
 
-    public void postInvalidate() {
-      overlay.postInvalidate();
+    /**
+     * Removes a graphic from the overlay.
+     */
+    public void remove(Graphic graphic) {
+        synchronized (lock) {
+            graphics.remove(graphic);
+        }
+        postInvalidate();
     }
-  }
 
-  public GraphicOverlay(Context context, AttributeSet attrs) {
-    super(context, attrs);
-  }
-
-  /** Removes all graphics from the overlay. */
-  public void clear() {
-    synchronized (lock) {
-      graphics.clear();
+    /**
+     * Sets the camera attributes for size and facing direction, which informs how to transform image
+     * coordinates later.
+     */
+    public void setCameraInfo(int previewWidth, int previewHeight, int facing) {
+        synchronized (lock) {
+            this.previewWidth = previewWidth;
+            this.previewHeight = previewHeight;
+            this.facing = facing;
+        }
+        postInvalidate();
     }
-    postInvalidate();
-  }
 
-  /** Adds a graphic to the overlay. */
-  public void add(Graphic graphic) {
-    synchronized (lock) {
-      graphics.add(graphic);
+    /**
+     * Draws the overlay with its associated graphic objects.
+     */
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+
+        synchronized (lock) {
+            if ((previewWidth != 0) && (previewHeight != 0)) {
+                widthScaleFactor = (float) getWidth() / (float) previewWidth;
+                heightScaleFactor = (float) getHeight() / (float) previewHeight;
+            }
+
+            for (Graphic graphic : graphics) {
+                graphic.draw(canvas);
+            }
+        }
     }
-  }
 
-  /** Removes a graphic from the overlay. */
-  public void remove(Graphic graphic) {
-    synchronized (lock) {
-      graphics.remove(graphic);
+    /**
+     * Base class for a custom graphics object to be rendered within the graphic overlay. Subclass
+     * this and implement the {@link Graphic#draw(Canvas)} method to define the graphics element. Add
+     * instances to the overlay using {@link GraphicOverlay#add(Graphic)}.
+     */
+    public abstract static class Graphic {
+        private GraphicOverlay overlay;
+
+        public Graphic(GraphicOverlay overlay) {
+            this.overlay = overlay;
+        }
+
+
+        public abstract void draw(Canvas canvas);
+
+        /**
+         * Adjusts a horizontal value of the supplied value from the preview scale to the view scale.
+         */
+        protected float scaleX(float horizontal) {
+            return horizontal * overlay.widthScaleFactor;
+        }
+
+        /**
+         * Adjusts a vertical value of the supplied value from the preview scale to the view scale.
+         */
+        public float scaleY(float vertical) {
+            return vertical * overlay.heightScaleFactor;
+        }
+
+        /**
+         * Returns the application context of the app.
+         */
+        public Context getApplicationContext() {
+            return overlay.getContext().getApplicationContext();
+        }
+
+        /**
+         * Adjusts the x coordinate from the preview's coordinate system to the view coordinate system.
+         */
+        public float translateX(float x) {
+            if (overlay.facing == CameraSource.CAMERA_FACING_FRONT) {
+                return overlay.getWidth() - scaleX(x);
+            } else {
+                return scaleX(x);
+            }
+        }
+
+        /**
+         * Adjusts the y coordinate from the preview's coordinate system to the view coordinate system.
+         */
+        public float translateY(float y) {
+            return scaleY(y);
+        }
+
+        public void postInvalidate() {
+            overlay.postInvalidate();
+        }
     }
-    postInvalidate();
-  }
-
-  /**
-   * Sets the camera attributes for size and facing direction, which informs how to transform image
-   * coordinates later.
-   */
-  public void setCameraInfo(int previewWidth, int previewHeight, int facing) {
-    synchronized (lock) {
-      this.previewWidth = previewWidth;
-      this.previewHeight = previewHeight ;
-      this.facing = facing;
-    }
-    postInvalidate();
-  }
-
-  /** Draws the overlay with its associated graphic objects. */
-  @Override
-  protected void onDraw(Canvas canvas) {
-    super.onDraw(canvas);
-
-    synchronized (lock) {
-      if ((previewWidth != 0) && (previewHeight != 0)) {
-        widthScaleFactor = (float) canvas.getWidth() / (float) previewWidth;
-        heightScaleFactor = (float) canvas.getHeight() / (float) previewHeight;
-      }
-
-      for (Graphic graphic : graphics) {
-        graphic.draw(canvas);
-      }
-    }
-  }
 }

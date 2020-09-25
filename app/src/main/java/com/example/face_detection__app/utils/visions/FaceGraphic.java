@@ -32,18 +32,13 @@ import com.google.firebase.ml.vision.face.FirebaseVisionFace;
 public class FaceGraphic extends GraphicOverlay.Graphic {
     private static final float ID_TEXT_SIZE = 30.0f;
     private static final float BOX_STROKE_WIDTH = 5.0f;
-
-    private int facing;
-
     private final Paint facePositionPaint;
     private final Paint idPaint;
     private final Paint boxPaint;
-
-    private volatile FirebaseVisionFace firebaseVisionFace;
-
     private final Bitmap overlayBitmap;
-
     FaceDetectStatus faceDetectStatus = null;
+    private int facing;
+    private volatile FirebaseVisionFace firebaseVisionFace;
 
 
     FaceGraphic(GraphicOverlay overlay, FirebaseVisionFace face, int facing, Bitmap overlayBitmap) {

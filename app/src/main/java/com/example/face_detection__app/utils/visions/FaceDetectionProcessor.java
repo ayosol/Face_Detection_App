@@ -41,15 +41,12 @@ import java.io.IOException;
 import java.util.List;
 
 
-
 public class FaceDetectionProcessor extends VisionProcessorBase<List<FirebaseVisionFace>> implements FaceDetectStatus {
 
     private static final String TAG = "FaceDetectionProcessor";
-    public FaceDetectStatus faceDetectStatus = null;
     private final FirebaseVisionFaceDetector detector;
-
     private final Bitmap overlayBitmap;
-
+    public FaceDetectStatus faceDetectStatus = null;
     public FrameReturn frameHandler = null;
 
     public FaceDetectionProcessor(Resources resources) {

@@ -1,7 +1,7 @@
 package com.example.face_detection__app.utils.models;
 
 public class RectModel {
-    private float left,top, right,bottom ;
+    private float left, top, right, bottom;
 
     public RectModel(float left, float top, float right, float bottom) {
         this.left = left;

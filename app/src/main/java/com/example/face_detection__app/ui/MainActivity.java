@@ -11,7 +11,6 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat.OnRequestPermissionsResultCallback;
-import androidx.core.content.ContextCompat;
 
 import com.example.face_detection__app.R;
 import com.example.face_detection__app.utils.base.BaseActivity;
@@ -25,15 +24,12 @@ import com.example.face_detection__app.utils.interfaces.FaceDetectStatus;
 import com.example.face_detection__app.utils.interfaces.FrameReturn;
 import com.example.face_detection__app.utils.models.RectModel;
 import com.example.face_detection__app.utils.visions.FaceDetectionProcessor;
-
 import com.google.android.gms.common.annotation.KeepName;
 import com.google.firebase.ml.vision.face.FirebaseVisionFace;
 import com.hsalf.smilerating.BaseRating;
 import com.hsalf.smilerating.SmileRating;
 
 import java.io.IOException;
-
-
 
 import static com.example.face_detection__app.utils.base.Constants.IMG_EXTRA_KEY;
 
@@ -155,13 +151,13 @@ public final class MainActivity extends BaseActivity
         int smile = 0;
 
         if (face.getSmilingProbability() > .8) {
-            smile = BaseRating.GREAT ;
+            smile = BaseRating.GREAT;
         } else if (face.getSmilingProbability() <= .8 && face.getSmilingProbability() > .6) {
-            smile = BaseRating.GOOD ;
+            smile = BaseRating.GOOD;
         } else if (face.getSmilingProbability() <= .6 && face.getSmilingProbability() > .4) {
-            smile = BaseRating.OKAY ;
+            smile = BaseRating.OKAY;
         } else if (face.getSmilingProbability() <= .4 && face.getSmilingProbability() > .2) {
-            smile = BaseRating.BAD ;
+            smile = BaseRating.BAD;
         }
         smile_rating.setSelectedSmile(smile, true);
 
@@ -195,8 +191,7 @@ public final class MainActivity extends BaseActivity
             String path = PublicMethods.saveToInternalStorage(croppedImage, Constants.IMG_FILE, mActivity);
             startActivity(new Intent(MainActivity.this, ImageViewerActivity.class)
                     .putExtra(IMG_EXTRA_KEY, path));
-        }
-        else {
+        } else {
             Toast.makeText(
                     getApplicationContext(),
                     "Something Went wrong. Image not taken",

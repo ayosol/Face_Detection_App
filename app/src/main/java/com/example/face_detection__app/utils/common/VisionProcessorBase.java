@@ -20,8 +20,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.example.face_detection__app.utils.interfaces.VisionImageProcessor;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.ml.vision.common.FirebaseVisionImage;
 import com.google.firebase.ml.vision.common.FirebaseVisionImageMetadata;
@@ -108,7 +106,7 @@ public abstract class VisionProcessorBase<T> implements VisionImageProcessor {
                             processLatestImage(graphicOverlay);
                         })
                 .addOnFailureListener(
-                        e -> VisionProcessorBase.this.onFailure(e));
+                        VisionProcessorBase.this::onFailure);
     }
 
     @Override

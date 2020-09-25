@@ -7,13 +7,13 @@
     <uses-feature android:name="android.hardware.camera" />
 
     <application
+        android:name=".utils.base.MyApplication"
         android:allowBackup="true"
-        android:icon="@mipmap/ic_face_recognition"
+        android:icon="@drawable/ic_face_recognition"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_face_recognition"
+        android:roundIcon="@drawable/ic_face_recognition"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:name=".utils.base.MyApplication"
         tools:ignore="GoogleAppIndexingWarning">
 
         <activity
