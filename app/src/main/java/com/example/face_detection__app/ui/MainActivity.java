@@ -204,6 +204,6 @@ public final class MainActivity extends BaseActivity
     public void onFaceNotLocated() {
         //faceFrame.setColorFilter(ContextCompat.getColor(this, R.color.blue_dark));
         takePhoto.setEnabled(false);
-        Toast.makeText(getApplicationContext(), "No Face Detected", Toast.LENGTH_SHORT).show();
+        //Toast.makeText(getApplicationContext(), "No Face Detected", Toast.LENGTH_SHORT).show();
     }
 }
